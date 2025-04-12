@@ -2,14 +2,28 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const md5 = require('md5');
+require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// CORS 配置
+const corsOptions = {
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:5000',
+        'https://zcq99.github.io'  // 替换为你的实际域名
+    ],
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.static('.'));
 
-const BAIDU_APP_ID = '20250412002331105';
-const BAIDU_KEY = 'Vm87jNXqfZmUmQrGBTRc';
+// 从环境变量获取 API 密钥
+const BAIDU_APP_ID = process.env.BAIDU_APP_ID;
+const BAIDU_KEY = process.env.BAIDU_KEY;
 
 app.post('/translate', async (req, res) => {
     try {

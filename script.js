@@ -1,6 +1,7 @@
 // 百度翻译API配置
-const BAIDU_APP_ID = '20250412002331105';
-const BAIDU_KEY = 'Vm87jNXqfZmUmQrGBTRc';
+// 删除这些硬编码的配置
+// const BAIDU_APP_ID = '20250412002331105';
+// const BAIDU_KEY = 'Vm87jNXqfZmUmQrGBTRc';
 
 class TranslationApp {
     constructor() {
@@ -66,33 +67,48 @@ class TranslationApp {
 
     async translate(text) {
         try {
-            const response = await fetch('http://localhost:3000/translate', {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            const response = await fetch(`${this.serverUrl}/translate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     text,
-                    from: this.isChineseToJapanese ? 'zh' : 'jp',  // 修改这里：'ja' -> 'jp'
-                    to: this.isChineseToJapanese ? 'jp' : 'zh'     // 修改这里：'ja' -> 'jp'
-                })
+                    from: this.isChineseToJapanese ? 'zh' : 'jp',
+                    to: this.isChineseToJapanese ? 'jp' : 'zh'
+                }),
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
             const data = await response.json();
             console.log('Translation response:', data);
 
-            if (data.error_code) {  // 修改这里：检查 error_code
+            if (data.error_code) {
                 console.error('API Error:', data);
-                throw new Error(data.error_msg);
+                throw new Error(`翻译API错误: ${data.error_msg}`);
             }
             if (!data.trans_result || !data.trans_result[0]) {
                 console.error('Invalid response:', data);
-                throw new Error('翻译结果格式错误');
+                throw new Error('服务器返回数据格式错误');
             }
             return data.trans_result[0].dst;
         } catch (error) {
             console.error('Detailed error:', error);
-            throw new Error('翻译服务暂时不可用');
+            if (error.name === 'AbortError') {
+                throw new Error('服务器响应超时，请检查网络连接');
+            } else if (error.message.includes('Failed to fetch')) {
+                throw new Error('无法连接到翻译服务器，请确保服务器已启动');
+            }
+            throw error;
         }
     }
 
