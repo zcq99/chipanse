@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>日中翻译 | 和風詞典</title>
+    <title>日中翻译 | 你也要勉强日语吗</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
@@ -18,13 +18,20 @@
         <!-- 主要搜索区域 -->
         <div class="main-content">
             <div class="logo">
-                <h1>和風詞典</h1>
+                <h1>你也要勉强日语吗^_^</h1>
                 <div class="cherry-blossom"></div>
             </div>
             
             <div class="search-container">
-                <input type="text" id="searchInput" placeholder="输入中文或日语...">
-                <button id="translateBtn">翻译</button>
+                <div class="translation-direction">
+                    <span id="fromLang">中文</span>
+                    <button id="switchBtn">⇄</button>
+                    <span id="toLang">日语</span>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="searchInput" placeholder="输入要翻译的文本...">
+                    <button id="translateBtn">翻译</button>
+                </div>
                 <div id="suggestions" class="suggestions"></div>
             </div>
 

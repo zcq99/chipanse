@@ -11,8 +11,21 @@ class TranslationApp {
         this.examples = document.getElementById('examples');
         this.translation = document.getElementById('translation');
         this.searchHistory = document.getElementById('searchHistory');
+        this.switchBtn = document.getElementById('switchBtn');
+        this.fromLang = document.getElementById('fromLang');
+        this.toLang = document.getElementById('toLang');
+        this.speechSynthesis = window.speechSynthesis;
+        this.isChineseToJapanese = true;
         
-        this.history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+        try {
+            this.history = JSON.parse(localStorage.getItem('searchHistory'));
+            if (!Array.isArray(this.history)) {
+                this.history = [];
+            }
+        } catch (error) {
+            this.history = [];
+        }
+        
         this.initializeEventListeners();
         this.renderHistory();
     }
@@ -20,19 +33,27 @@ class TranslationApp {
     initializeEventListeners() {
         this.translateBtn.addEventListener('click', () => this.handleTranslation());
         this.searchInput.addEventListener('input', () => this.handleInput());
+        // 添加切换按钮事件监听
+        this.switchBtn.addEventListener('click', () => this.switchTranslationDirection());
+    }
+
+    // 添加切换翻译方向的方法
+    switchTranslationDirection() {
+        this.isChineseToJapanese = !this.isChineseToJapanese;
+        this.fromLang.textContent = this.isChineseToJapanese ? '中文' : '日语';
+        this.toLang.textContent = this.isChineseToJapanese ? '日语' : '中文';
+        this.searchInput.placeholder = `输入${this.fromLang.textContent}...`;
     }
 
     async handleTranslation() {
         const text = this.searchInput.value.trim();
         if (!text) return;
 
+        // 添加加载状态
+        this.translation.innerHTML = '正在翻译...';
+        
         try {
-            // 检测输入语言
-            const detectedLang = await this.detectLanguage(text);
-            const targetLang = detectedLang === 'ja' ? 'zh' : 'ja';
-
-            // 获取翻译
-            const translation = await this.translate(text, targetLang);
+            const translation = await this.translate(text);
             
             // 更新UI
             this.updateResults(text, translation);
@@ -43,41 +64,34 @@ class TranslationApp {
         }
     }
 
-    async detectLanguage(text) {
-        return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(text) 
-            ? 'ja' 
-            : 'zh';
-    }
-
-    async translate(text, targetLang) {
+    async translate(text) {
         try {
-            const salt = new Date().getTime();
-            const str = BAIDU_APP_ID + text + salt + BAIDU_KEY;
-            const sign = md5(str);
-
-            const params = new URLSearchParams({
-                q: text,
-                from: targetLang === 'ja' ? 'zh' : 'jp',
-                to: targetLang === 'ja' ? 'jp' : 'zh',
-                appid: BAIDU_APP_ID,
-                salt: salt,
-                sign: sign
-            });
-
-            const response = await fetch(`https://api.fanyi.baidu.com/api/trans/vip/translate?${params}`, {
-                method: 'GET',
+            const response = await fetch('http://localhost:3000/translate', {
+                method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text,
+                    from: this.isChineseToJapanese ? 'zh' : 'jp',  // 修改这里：'ja' -> 'jp'
+                    to: this.isChineseToJapanese ? 'jp' : 'zh'     // 修改这里：'ja' -> 'jp'
+                })
             });
 
             const data = await response.json();
-            if (data.error_code) {
-                throw new Error(`百度翻译错误: ${data.error_msg}`);
+            console.log('Translation response:', data);
+
+            if (data.error_code) {  // 修改这里：检查 error_code
+                console.error('API Error:', data);
+                throw new Error(data.error_msg);
+            }
+            if (!data.trans_result || !data.trans_result[0]) {
+                console.error('Invalid response:', data);
+                throw new Error('翻译结果格式错误');
             }
             return data.trans_result[0].dst;
         } catch (error) {
-            console.error('Translation error:', error);
+            console.error('Detailed error:', error);
             throw new Error('翻译服务暂时不可用');
         }
     }
@@ -110,8 +124,59 @@ class TranslationApp {
     updateResults(original, translation) {
         this.translation.innerHTML = `
             <h3>翻译结果</h3>
-            <p>${translation}</p>
+            <div class="translation-result">
+                <p>${translation}</p>
+                <button class="speak-btn" onclick="window.app.speak('${translation}')">
+                    <span class="speak-icon">🔊</span>
+                </button>
+            </div>
         `;
+    }
+
+    speak(text) {
+        this.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = this.speechSynthesis.getVoices();
+        
+        if (!this.isChineseToJapanese) {
+            // 中文输出
+            utterance.lang = 'zh-CN';
+            // 优先使用 Microsoft 的中文语音
+            const chineseVoice = voices.find(voice => 
+                voice.name.includes('Microsoft') && voice.name.includes('Xiaoxiao')
+            ) || voices.find(voice => 
+                voice.lang.startsWith('zh')
+            );
+            
+            if (chineseVoice) {
+                utterance.voice = chineseVoice;
+                utterance.rate = 0.9;  // 稍微降低语速
+            }
+        } else {
+            // 日语输出
+            utterance.lang = 'ja-JP';
+            const japaneseVoice = voices.find(voice => 
+                voice.name.includes('Microsoft') && voice.name.includes('Nanami')
+            ) || voices.find(voice => 
+                voice.lang.includes('ja')
+            );
+            
+            if (japaneseVoice) {
+                utterance.voice = japaneseVoice;
+                utterance.rate = 1.0;
+            }
+        }
+
+        utterance.volume = 1.0;
+        utterance.pitch = 1.0;
+
+        // 添加错误处理
+        utterance.onerror = (event) => {
+            console.error('Speech synthesis error:', event);
+        };
+
+        this.speechSynthesis.speak(utterance);
     }
 
     addToHistory(original, translated) {
@@ -123,23 +188,29 @@ class TranslationApp {
     }
 
     renderHistory() {
+        if (!this.history) return;
+        
         this.searchHistory.innerHTML = this.history
             .map(item => `
                 <div class="history-item">
-                    <div>${item.original} ➔ ${item.translated}</div>
-                    <div class="timestamp">${new Date(item.timestamp).toLocaleString()}</div>
+                    <div class="history-text">
+                        <span>${item.original}</span>
+                        <span>➔</span>
+                        <span>${item.translated}</span>
+                    </div>
+                    <div class="history-controls">
+                        <div class="timestamp">${new Date(item.timestamp).toLocaleString()}</div>
+                        <button class="speak-btn" onclick="window.app.speak('${item.translated}')">
+                            <span class="speak-icon">🔊</span>
+                        </button>
+                    </div>
                 </div>
             `)
             .join('');
     }
 }
 
-// MD5加密函数
-function md5(string) {
-    return CryptoJS.MD5(string).toString();
-}
-
 // 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
-    new TranslationApp();
+    window.app = new TranslationApp();
 });
